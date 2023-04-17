@@ -1,0 +1,90 @@
+Log in to the AWS Management Console using the credentials provided on the lab instructions page. Make sure you're using the us-east-1 Region.																																																																																											
+																																																																																											
+Ensure there is an available bucket under Amazon S3>Buckets.																																																																																											
+																																																																																											
+In a different tab, navigate to the EC2 dashboard, find the running instance, and then connect by doing the following:																																																																																											
+																																																																																											
+Navigate to EC2> Instances (running).																																																																																											
+Click on the checkbox next to the instance name.																																																																																											
+In the upper right corner, select Connect.																																																																																											
+Choose Session Manager, and select Connect.																																																																																											
+Once connected, assume the cloud_user identity by running: sudo su cloud_user.																																																																																											
+Run cd to get to the cloud_user home.																																																																																											
+Print the working directory: pwd.																																																																																											
+Confirm you are cloud_user: whoami.																																																																																											
+																																																																																											
+Note: When copying and pasting code into Vim from the lab guide, first enter :set paste (and then i to enter insert mode) to avoid adding unnecessary spaces and hashes. To save and quit the file, press Escape followed by :wq. To exit the file without saving, press Escape followed by :q!.																																																																																											
+																																																																																											
+Note: If the EC2 instance is not showing the ability to connect via Session Manager, simply restart the instance to restart the SSM Agent.																																																																																											
+																																																																																											
+Upload Content to S3 Bucket																																																																																											
+																																																																																											
+Verify pre-existing files:																																																																																											
+ls 																																																																																											
+Upload the index.html file to the bucket (replacing <BUCKET_NAME_PROVIDED> with the S3 bucket name listed on the lab page):																																																																																											
+aws s3 cp index.html s3://<BUCKET_NAME_PROVIDED> 																																																																																											
+																																																																																											
+Create CloudFront OAI																																																																																											
+																																																																																											
+Generate a UUID by running uuidgen in the console. Copy and save the UUID in a separate text file; use that for the next step.																																																																																											
+Create a CloudFront origin access identity (replacing <YOUR_UNIQUE_UUIDGEN_HERE> with the uuidgen):																																																																																											
+aws cloudfront create-cloud-front-origin-access-identity --cloud-front-origin-access-identity-config CallerReference=<YOUR_UNIQUE_UUIDGEN_HERE>,Comment=MyOAI 																																																																																											
+Copy the Id from the output and paste it into a text file, as we'll need it for the next step.																																																																																											
+Also, save the OAI Id to an environment variable:																																																																																											
+export OAI_ID=<Id value here> 																																																																																											
+																																																																																											
+Modify S3 Policy File in Directory and Execute It Against S3 Bucket																																																																																											
+																																																																																											
+Run the next command to substitute your OAI into the policy_cloudfront.json document.																																																																																											
+sed "s/<OAI-ID>/$(echo $OAI_ID)/" policy_cloudfront.json to test the changes.																																																																																											
+Run sed -i "s/<OAI-ID>/$(echo $OAI_ID)/" policy_cloudfront.json to save the changes.																																																																																											
+Execute this policy against the S3 website bucket (NOTE: The <BUCKET_NAME> is the S3 Website BucketName found in the credentials section.):																																																																																											
+aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://policy_cloudfront.json 																																																																																											
+Navigate to the Amazon S3 Console, click on the bucket, and go to the Permissions tab to confirm the bucket policy has been updated.																																																																																											
+																																																																																											
+Create CloudFront Distribution																																																																																											
+																																																																																											
+Create a CloudFront distribution:																																																																																											
+aws cloudfront create-distribution --origin-domain-name <BUCKET_NAME>.s3.amazonaws.com --default-root-object index.html 																																																																																											
+Copy the ETag and Id of the CloudFront distribution from within the returned JSON string and paste them into a text file, as we'll need them later.																																																																																											
+Export the Id to an environment variable:																																																																																											
+export CF_ID=<Id value here> 																																																																																											
+Export the ETag to an environment variable:																																																																																											
+export CF_ETAG=<Id value here> 																																																																																											
+																																																																																											
+Get and Update the CloudFront Distribution Config																																																																																											
+																																																																																											
+Get the CloudFront distribution config and filter out the distribution-specific part:																																																																																											
+																																																																																											
+aws cloudfront get-distribution-config --id $CF_ID | jq -r .DistributionConfig > dist-config.json 																																																																																											
+List the files:																																																																																											
+																																																																																											
+ls 																																																																																											
+Open the newly created dist-config.json file:																																																																																											
+																																																																																											
+vim dist-config.json 																																																																																											
+Modify the following properties in the file (NOTE: You will need the OAI_Id.):																																																																																											
+																																																																																											
+"OriginAccessIdentity": "origin-access-identity/cloudfront/<OAI_ID>"																																																																																											
+"PriceClass": "PriceClass_100"																																																																																											
+"ViewerProtocolPolicy": "redirect-to-https"																																																																																											
+Save and exit the file:																																																																																											
+																																																																																											
+:wq 																																																																																											
+																																																																																											
+Update CloudFront Distribution with the Modified dist-config.json File																																																																																											
+																																																																																											
+Update the CloudFront distribution with the dist-config.json file:																																																																																											
+aws cloudfront update-distribution --id $CF_ID --distribution-config file://dist-config.json --if-match $CF_ETAG 																																																																																											
+																																																																																											
+Test and Verify																																																																																											
+																																																																																											
+In the AWS console, navigate to CloudFront Console.																																																																																											
+Click on the only distribution listed to view the details; CloudFront distributions take about 20 minutes to propagate, so give it some time to complete before testing.																																																																																											
+Click the Origins tab.																																																																																											
+Select the radio button for the origin listed, and click Edit.																																																																																											
+Review the settings, then click Cancel to exit.																																																																																											
+Click the Behaviors tab and confirm the Viewer protocol policy is Redirect HTTP to HTTPs.																																																																																											
+Click the General tab and copy the domain name.																																																																																											
+Once it's deployed, paste the copied domain name to a new browser tab to to verify our CloudFront distribution is serving the S3 static website properly.
+
